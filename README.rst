@@ -6,6 +6,11 @@ designed and implemented, intended to have something that "just works" until
 we get a proper package manager. It depends on plumbum, docopt, and toml. This
 isn't intended to grow into a production-quality package manager.
 
+What does it do? It fetches dependencies and builds them. Eventually it will
+be able to update deps by fetching from hg/git, and also when rustc version
+changes. That's it. That's all it does. No configurable package script, no
+fancy only-rebuild-what-is-necessary, no handling of cyclic dependencies, etc.
+
 example
 =======
 
@@ -42,9 +47,10 @@ todo
 non-goals
 ---------
 
-- versioning
-- build system
-- rustc integration
-- rust rewrite
+- versioning of dependencies
+- build system beyond simply running rustc or a single shell command
+- rustc integration beyond what is already present (no hooking into libsyntax
+  etc)
+- rust rewrite, or a rewrite into any other language
 
 .. _toml: https://github.com/mojombo/toml
