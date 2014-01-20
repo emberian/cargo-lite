@@ -30,6 +30,8 @@ todo
 ----
 
 - some sort of setup.py?
+- ``cargo-lite.py build`` (install deps in cwd, build crate file with proper
+  -L)
 - handle package config files betterly
 - store rustc version lib built with
 - support repo containing multiple packages
