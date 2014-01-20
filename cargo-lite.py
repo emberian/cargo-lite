@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 # Copyright 2014 The Rust Project Developers. See LICENSE for more details.
-"""Naval Fate.
+"""cargo-lite, a dirt simple Rust package manager
 
 Usage:
   cargo-lite.py install [--git | --hg | --local] <path> [<package>]
