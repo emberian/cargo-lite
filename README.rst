@@ -8,8 +8,9 @@ isn't intended to grow into a production-quality package manager.
 
 What does it do? It fetches dependencies and builds them. Eventually it will
 be able to update deps by fetching from hg/git, and also when rustc version
-changes. That's it. That's all it does. No configurable package script, no
-fancy only-rebuild-what-is-necessary, no handling of cyclic dependencies, etc.
+changes. That's it. That's all it does. No fancy configurable package script
+(a la rustpkg), no fancy only-rebuild-what-is-necessary, no handling of cyclic
+dependencies, etc.
 
 example
 =======
