@@ -37,4 +37,12 @@ todo
 - configurable repodir + libdir
 - per-project repos.
 
+non-goals
+---------
+
+- versioning
+- build system
+- rustc integration
+- rust rewrite
+
 .. _toml: https://github.com/mojombo/toml
