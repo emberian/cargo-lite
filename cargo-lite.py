@@ -130,6 +130,9 @@ def build(args, conf):
 
             args = b.get('rustc_args', [])
             args.append(crate_root)
+            args.append("--rlib")
+            args.append("--staticlib")
+            args.append("--dylib")
             output = rustc(*args)
 
             if output.exit_code != 0:
