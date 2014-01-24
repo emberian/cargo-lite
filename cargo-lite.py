@@ -20,7 +20,8 @@ import os
 import shutil
 
 from docopt import docopt
-from plumbum.cmd import git, hg, rustc
+from sh import git, hg, rustc
+import sh
 import toml
 
 VERSION = 'cargo-lite.py 0.1.0'
@@ -53,7 +54,6 @@ class cd:
     def __init__(self, newPath):
         newPath = os.path.abspath(os.path.expandvars(os.path.expanduser(newPath)))
         self.newPath = newPath
-        print "entering {}".format(newPath)
         if not os.path.exists(newPath):
             os.makedirs(newPath)
 
@@ -93,45 +93,64 @@ def fetch(args):
     if local:
         shutil.copytree(expand(path), dest)
     elif git:
-        git["clone", path, dest]()
+        git.clone(path, dest)
     elif hg:
-        hg["clone", path, dest]()
+        hg.clone(path, dest)
     return dest
 
 
 def build(args, conf):
-    print "build in {}".format(os.getcwd())
+    if 'subpackages' in conf:
+        s = conf['subpackages']
+        sys.stderr.write("TODO: subpackages NYI")
+        sys.exit(1)
+
     if 'build' in conf:
         b = conf['build']
         if 'crate_file' in b:
             crate_root = os.path.abspath(b['crate_file'])
-            status, names, stderr = rustc.run(args=("--crate-file-name", crate_root))
-            if status != 0:
-                sys.stdout.write("--crate-file-name failed, status {}, stderr:\n".format(status))
-                sys.stdout.write(stderr)
-                sys.stdout.write("\nstdout:\n")
-                sys.stdout.write(names)
+            output = rustc("--crate-file-name", crate_root, _iter=True)
+            if output.exit_code != 0:
+                sys.stderr.write("--crate-file-name failed, status {}, stderr:\n".format(output.exit_code))
+                sys.stderr.write(str(output))
                 sys.exit(1)
 
-            if all([os.path.exists(os.path.join(libdir(), x)) for x in names.split('\n') if x != ""]):
-                print "wow they're all there!"
+            names = list(output)
 
-            print "crate root is {}".format(crate_root)
+            if all([os.path.exists(os.path.join(libdir(), x)) for x in names if x != ""]):
+                print "all artifacts present, not rebuilding (TODO: add way to rebuild)"
+                return
+
             args = b.get('rustc_args', [])
             args.append(crate_root)
-            status, stdout, stderr = rustc.run(*args)
+            output = rustc(*args)
+            status, stdout, stderr = rustc(*args)
+
             if status != 0:
-                sys.stdout.write("building {} with rustc failed with status {}, stderr:\n".format(crate_root, status))
-                sys.stdout.write(stderr)
-                sys.stdout.write("\nstdout:\n")
-                sys.stdout.write(stdout)
+                sys.stderr.write("building {} with rustc failed with status {}, stderr:\n".format(crate_root, status))
+                sys.stderr.write(stderr)
+                sys.stderr.write("\nstdout:\n")
+                sys.stderr.write(stdout)
                 sys.exit(1)
-            for fname in filter(lambda x: x != "", names.split('\n')):
+            for fname in filter(lambda x: x != '', names.split('\n')):
                 shutil.copy(os.path.join(os.path.dirname(crate_root), fname), libdir())
 
         elif 'build_cmd' in b:
-            sys.stdout.write("arbitrary build commands not yet supported\n")
-            sys.exit(1)
+            out = sh.Command(b["build_cmd"])()
+            if not out.startswith("cargo-lite: "):
+                raise Exception("malformed output in build_cmd's stdout")
+            if out.startswith("cargo-lite: artifacts"):
+                for artifact in filter(lambda x: x != "", out.split("\n")[1:]):
+                    shutil.copy(artifact, libdir())
+            elif out.startswith("carg-lite: crate_file="):
+                args = dict(args)
+                del args["build"]["build_cmd"]
+                args["build"]["crate_root"] = out.replace("cargo-lite: crate_root=", "")
+                install(args)
+            else:
+                sys.stderr.write(str(out))
+                sys.stderr.write("unrecognized directive in build_cmd output\n")
+                sys.exit(1)
         else:
             raise Exception("unrecognized build information in cargo-lite.conf")
     else:
@@ -144,20 +163,15 @@ def install(args):
     for dep in conf.get('deps', []):
         # whee prepend!
         dep.insert(0, 'install')
-        print dep
         install(docopt(__doc__, version=VERSION, argv=dep))
 
     with cd(path):
         build(args, conf)
 
-    print conf
-    print path
-
-
 if __name__ == '__main__':
-    print sys.argv
     arguments = docopt(__doc__, version=VERSION)
-    print arguments
-    print
     if arguments['install']:
         install(arguments)
+    else:
+        sys.stderr.write("non-install commands not yet supported\n")
+        sys.exit(1)

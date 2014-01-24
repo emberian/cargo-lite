@@ -1,9 +1,10 @@
-cargo-lite
-==========
+=================
+cargo-lite v0.1.0
+=================
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
 designed and implemented, intended to have something that "just works" until
-we get a proper package manager. It depends on plumbum, docopt, and toml. This
+we get a proper package manager. It depends on sh_, docopt, and toml. This
 isn't intended to grow into a production-quality package manager.
 
 What does it do? It fetches dependencies and builds them. Eventually it will
@@ -13,7 +14,7 @@ changes. That's it. That's all it does. No fancy configurable package script
 dependencies, etc.
 
 example
-=======
+-------
 
 Slap a ``cargo-lite.conf`` in your repository! See the help, too. The config
 files are toml_. There's an example in this repo. It has some useful comments.
@@ -35,13 +36,13 @@ this today".
 todo
 ----
 
+- documentation
 - some sort of setup.py?
 - ``cargo-lite.py build`` (install deps in cwd, build crate file with proper
   -L)
 - handle package config files betterly
 - store rustc version lib built with
 - support repo containing multiple packages
-- document what the hell this thing expects
 - configurable repodir + libdir
 - per-project repos.
 
@@ -54,4 +55,62 @@ non-goals
   etc)
 - rust rewrite, or a rewrite into any other language
 
+============================
+How To Use ``cargo-lite.py``
+============================
+
+First, you need a ``cargo-lite.conf`` in the top-level directory of your
+repository. In it you will list your dependencies. You do this with a nested
+list::
+
+    deps = [
+        ["--git", "http://github.com/bjz/gl-rs.git"]
+    ,   ["--git", "http://github.com/bjz/glfw-rs.git"] # bjz so amaze?
+    ]
+
+This specifies two dependencies: gl-rs_ and glfw-rs_. It specifies that they
+should be cloned with ``git``. ``cargo-lite.py install`` will read their
+top-level ``cargo-lite.conf``, install all of their dependencies, and then
+build them, copying their build artifacts into the package depository
+(currently hardcoded as ``~/.rust``). To build your own crate, you need an
+additional section in the ``cargo-lite.conf``::
+
+    [build]
+    crate_file = "src/main.rs"
+
+This tells ``cargo-lite.py`` to run ``rustc`` on ``src/main.rs``. It will pass
+it the proper ``-L`` to link to its dependencies. You can add an additional
+directive to the build section to add flags::
+
+    [build]
+    crate_file = "src/main.rs"
+    rustc_args = ["-Z", "prefer-dynamic"]
+
+And that's it, for simple crates! For more complex projects, ``cargo-lite.py``
+will accept the following directives::
+
+    subpackages = ["src/foo", "src/examples"]
+    [build]
+    build_cmd = "./build.sh"
+
+``cargo-lite.py`` will first recurse into the subpackages, installing those,
+and will then run the ``build_cmd`` with the system's shell. The ``build_cmd``
+is expected to print one of two things::
+
+    cargo-lite: artifacts
+    libfoo-hash.rlib
+    libbar-hash.so
+
+    # or
+
+    cargo-lite: crate_root="src/main.rs",rustc_args=[...]
+
+For the first case, the listed artifacts will be copied into the depository.
+.. note:: the paths printed should be relative to the *repository root*.
+In the second, ``cargo-lite.py`` will run ``rustc`` on the given crate file
+with the given args as if it were from a ``cargo-lite.conf``.
+
 .. _toml: https://github.com/mojombo/toml
+.. _gl-rs: https://github.com/bjz/gl-rs
+.. _glfw-rs: https://github.com/bjz/glfw-rs
+.. _sh: http://amoffat.github.io/sh/index.html
