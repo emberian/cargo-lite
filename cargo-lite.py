@@ -4,7 +4,7 @@
 
 Usage:
   cargo-lite.py install [--git | --hg | --local] <path> [<package>]
-  cargo-lite.py build
+  cargo-lite.py build [<path>]
   cargo-lite.py --version
 
 Options:
@@ -65,6 +65,12 @@ class cd:
         os.chdir(self.savedPath)
 
 
+def success(output):
+    if output.exit_code != 0:
+        sys.stderr.write("command failed: {}".format(str(output)))
+        sys.exit(1)
+
+
 def fetch(args):
     "Fetch a package's source, returning the path to it"
 
@@ -102,13 +108,14 @@ def fetch(args):
 def build(args, conf):
     if 'subpackages' in conf:
         s = conf['subpackages']
-        sys.stderr.write("TODO: subpackages NYI")
-        sys.exit(1)
+        for subpackage in s:
+            with cd(subpackage):
+                build(args, from_pkgdir(subpackage))
 
     if 'build' in conf:
         b = conf['build']
-        if 'crate_file' in b:
-            crate_root = os.path.abspath(b['crate_file'])
+        if 'crate_root' in b:
+            crate_root = os.path.abspath(b['crate_root'])
             output = rustc("--crate-file-name", crate_root, _iter=True)
             if output.exit_code != 0:
                 sys.stderr.write("--crate-file-name failed, status {}, stderr:\n".format(output.exit_code))
@@ -124,13 +131,10 @@ def build(args, conf):
             args = b.get('rustc_args', [])
             args.append(crate_root)
             output = rustc(*args)
-            status, stdout, stderr = rustc(*args)
 
-            if status != 0:
-                sys.stderr.write("building {} with rustc failed with status {}, stderr:\n".format(crate_root, status))
-                sys.stderr.write(stderr)
-                sys.stderr.write("\nstdout:\n")
-                sys.stderr.write(stdout)
+            if output.exit_code != 0:
+                sys.stderr.write("building {} with rustc failed with status {}, output:\n".format(crate_root, output.exit_code))
+                sys.stderr.write(str(output))
                 sys.exit(1)
             for fname in filter(lambda x: x != '', names.split('\n')):
                 shutil.copy(os.path.join(os.path.dirname(crate_root), fname), libdir())
@@ -142,7 +146,7 @@ def build(args, conf):
             if out.startswith("cargo-lite: artifacts"):
                 for artifact in filter(lambda x: x != "", out.split("\n")[1:]):
                     shutil.copy(artifact, libdir())
-            elif out.startswith("carg-lite: crate_file="):
+            elif out.startswith("carg-lite: crate_root="):
                 args = dict(args)
                 del args["build"]["build_cmd"]
                 args["build"]["crate_root"] = out.replace("cargo-lite: crate_root=", "")
@@ -157,21 +161,52 @@ def build(args, conf):
         raise Exception("no build information in cargo-lite.conf!")
 
 
-def install(args):
-    path = fetch(args)
-    conf = from_pkgdir(path)
+def install_deps(args, conf):
     for dep in conf.get('deps', []):
         # whee prepend!
         dep.insert(0, 'install')
         install(docopt(__doc__, version=VERSION, argv=dep))
 
+
+def install(args):
+    path = fetch(args)
+    conf = from_pkgdir(path)
+    install_deps(args, conf)
+
     with cd(path):
         build(args, conf)
+
+
+def buildcmd(args):
+    p = args["<path>"]
+    if p is None:
+        p = os.getcwd()
+    conf = from_pkgdir(p)
+    install_deps(args, conf)
+    b = conf["build"]
+    if "crate_root" in b:
+        args = b.get("rustc_args", [])
+        args.append(b["crate_root"])
+        args.append("-L")
+        args.append(libdir())
+        args.append("--rlib")
+        args.append("--staticlib")
+        args.append("--dylib")
+        success(rustc(*args))
+    elif "build_cmd" in b:
+        # TODO: pass it libdir somehow, perhaps in env var?
+        success(sh.Command(b["build_cmd"])())
+    else:
+        sys.stderr.write("unrecognized build information in cargo-lite.conf")
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     arguments = docopt(__doc__, version=VERSION)
     if arguments['install']:
         install(arguments)
+    elif arguments['build']:
+        buildcmd(arguments)
     else:
-        sys.stderr.write("non-install commands not yet supported\n")
+        sys.stderr.write("unsupported command or command NYI")
         sys.exit(1)
