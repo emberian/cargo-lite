@@ -18,7 +18,9 @@ Installation
 
 Install using distutils::
 
-    python setup.py install
+    git clone https://github.com/cmr/cargo-lite.git
+    cd cargo-lite
+    sudo python setup.py install
 
 That should pull in the dependencies for you. Otherwise, copy
 ``cargo-lite.py`` into a directory in your PATH and make sure you have the

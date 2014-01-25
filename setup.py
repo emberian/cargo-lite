@@ -8,5 +8,6 @@ setup(name='cargo-lite',
       author='Corey Richardson',
       author_email='corey@octayn.net',
       url='http://github.com/cmr/cargo-lite',
-      scripts=['cargo-lite.py']
+      scripts=['cargo-lite.py'],
+      requires=['docopt', 'toml', 'sh'],
       )
