@@ -3,7 +3,7 @@
 """cargo-lite, a dirt simple Rust package manager
 
 Usage:
-  cargo-lite.py install [--git | --hg | --local] <path> [<package>]
+  cargo-lite.py install [--git | --hg | --local] [<path>] [<package>]
   cargo-lite.py build [<path>]
   cargo-lite.py --version
 
@@ -28,7 +28,7 @@ VERSION = 'cargo-lite.py 0.1.0'
 
 
 def expand(path):
-    return os.path.expandvars(os.path.expanduser(path))
+    return os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
 
 
 def repodir():
@@ -74,6 +74,15 @@ def success(output):
 def fetch(args):
     "Fetch a package's source, returning the path to it"
 
+    print args
+    if args["<path>"] is None:
+        dest = os.path.join(repodir(), os.path.split(expand("."))[-1])
+        if os.path.exists(dest):
+            print "Already found fetched copy of {}, skipping".format(pkg)
+            return dest
+        shutil.copytree(expand("."), dest)
+        return dest
+
     path = args['<path>']
 
     local = args['--local']
@@ -116,7 +125,7 @@ def build(args, conf):
         b = conf['build']
         if 'crate_root' in b:
             crate_root = os.path.abspath(b['crate_root'])
-            output = rustc("--crate-file-name", crate_root, _iter=True)
+            output = rustc("--crate-file-name", "--rlib", "--staticlib", "--dylib", crate_root, _iter=True)
             if output.exit_code != 0:
                 sys.stderr.write("--crate-file-name failed, status {}, stderr:\n".format(output.exit_code))
                 sys.stderr.write(str(output))
@@ -139,7 +148,7 @@ def build(args, conf):
                 sys.stderr.write("building {} with rustc failed with status {}, output:\n".format(crate_root, output.exit_code))
                 sys.stderr.write(str(output))
                 sys.exit(1)
-            for fname in filter(lambda x: x != '', names.split('\n')):
+            for fname in map(lambda x: x.strip(), filter(lambda x: x != '', names)):
                 shutil.copy(os.path.join(os.path.dirname(crate_root), fname), libdir())
 
         elif 'build_cmd' in b:
