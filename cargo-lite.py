@@ -20,7 +20,24 @@ import os
 import shutil
 
 from docopt import docopt
-from sh import git, hg, rustc
+try:
+    from sh import git
+except ImportError:
+    def git(*args, **kwargs):
+        sys.stderr.write("git not installed, but asked for!\n")
+        sys.exit(1)
+try:
+    from sh import hg
+except ImportError:
+    def hg(*args, **kwargs):
+        sys.stderr.write("git not installed, but asked for!\n")
+        sys.exit(1)
+try:
+    from sh import rustc
+except ImportError:
+    sys.stderr.write("cargo-lite.py requires rustc to be installed\n")
+    sys.exit(1)
+
 import sh
 import toml
 

@@ -10,4 +10,4 @@ setup(name='cargo-lite',
       url='http://github.com/cmr/cargo-lite',
       scripts=['cargo-lite.py'],
       install_requires=['docopt ', 'toml', 'sh'],
-      )
+     )
