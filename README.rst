@@ -108,15 +108,10 @@ this today".
 todo
 ----
 
-- documentation
-- some sort of setup.py?
-- ``cargo-lite.py build`` (install deps in cwd, build crate file with proper
-  -L)
-- handle package config files betterly
 - store rustc version lib built with
-- support repo containing multiple packages
 - configurable repodir + libdir
-- per-project repos.
+- per-project repos (like rustpkg's workspaces)
+- rebuild deps when they change (generate make files? see https://gist.github.com/csherratt/8627881)
 
 non-goals
 ---------
