@@ -4,8 +4,9 @@ cargo-lite v0.1.0
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
 designed and implemented, intended to have something that "just works" until
-we get a proper package manager. It depends on sh_, docopt, and toml. This
-isn't intended to grow into a production-quality package manager.
+there is a package manager that works reliably and well. It depends on sh_,
+docopt, and toml. This isn't intended to grow into a production-quality
+package manager.
 
 What does it do? It fetches dependencies and builds them. Eventually it will
 be able to update deps by fetching from hg/git, and also when rustc version
