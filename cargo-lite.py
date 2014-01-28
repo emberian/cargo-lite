@@ -91,7 +91,6 @@ def success(output):
 def fetch(args):
     "Fetch a package's source, returning the path to it"
 
-    print args
     if args["<path>"] is None:
         dest = os.path.join(repodir(), os.path.split(expand("."))[-1])
         if os.path.exists(dest):
