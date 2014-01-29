@@ -170,7 +170,13 @@ def build(args, conf):
                 shutil.copy(os.path.join(os.path.dirname(crate_root), fname), libdir())
 
         elif 'build_cmd' in b:
-            out = sh.Command(b["build_cmd"])()
+            try:
+                out = sh.Command(b["build_cmd"])()
+            except sh.ErrorReturnCode as e:
+                print "The build command for {} failed with exit code {}".format(
+                        args['<path>'], e.exit_code)
+                print e.message
+                sys.exit(1)
             if not out.startswith("cargo-lite: "):
                 raise Exception("malformed output in build_cmd's stdout")
             if out.startswith("cargo-lite: artifacts"):
