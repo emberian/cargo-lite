@@ -30,7 +30,7 @@ try:
     from sh import hg
 except ImportError:
     def hg(*args, **kwargs):
-        sys.stderr.write("git not installed, but asked for!\n")
+        sys.stderr.write("hg not installed, but asked for!\n")
         sys.exit(1)
 try:
     from sh import rustc
