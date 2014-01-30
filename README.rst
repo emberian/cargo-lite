@@ -27,6 +27,13 @@ That should pull in the dependencies for you. Otherwise, copy
 ``cargo-lite.py`` into a directory in your PATH and make sure you have the
 deps installed.
 
+Getting Help
+------------
+
+You can find me on irc.mozilla.org as ``cmr``. It's probably best to ask for
+help in ``#rust-gamedev``, since that's mostly what has spurred me to work on
+this project.
+
 ============================
 How To Use ``cargo-lite.py``
 ============================
