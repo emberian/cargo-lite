@@ -24,7 +24,7 @@ Install using distutils::
     sudo python setup.py install
 
 That should pull in the dependencies for you. Otherwise, copy
-``cargo-lite.py`` into a directory in your PATH and make sure you have the
+``cargo-lite`` into a directory in your PATH and make sure you have the
 deps installed.
 
 Getting Help
@@ -34,9 +34,9 @@ You can find me on irc.mozilla.org as ``cmr``. It's probably best to ask for
 help in ``#rust-gamedev``, since that's mostly what has spurred me to work on
 this project.
 
-============================
-How To Use ``cargo-lite.py``
-============================
+=========================
+How To Use ``cargo-lite``
+=========================
 
 First, you need a ``cargo-lite.conf`` in the top-level directory of your
 repository. In it you will list your dependencies. You do this with a nested
@@ -48,7 +48,7 @@ list::
     ]
 
 This specifies two dependencies: gl-rs_ and glfw-rs_. It specifies that they
-should be cloned with ``git``. ``cargo-lite.py install`` will read their
+should be cloned with ``git``. ``cargo-lite install`` will read their
 top-level ``cargo-lite.conf``, install all of their dependencies, and then
 build them, copying their build artifacts into the package depository
 (currently hardcoded as ``~/.rust``). To build your own crate, you need an
@@ -57,7 +57,7 @@ additional section in the ``cargo-lite.conf``::
     [build]
     crate_file = "src/main.rs"
 
-This tells ``cargo-lite.py`` to run ``rustc`` on ``src/main.rs``. It will pass
+This tells ``cargo-lite`` to run ``rustc`` on ``src/main.rs``. It will pass
 it the proper ``-L`` to link to its dependencies. You can add an additional
 directive to the build section to add flags::
 
@@ -65,16 +65,16 @@ directive to the build section to add flags::
     crate_file = "src/main.rs"
     rustc_args = ["-Z", "prefer-dynamic"]
 
-And that's it, for simple crates! You can use ``cargo-lite.py build`` to build
+And that's it, for simple crates! You can use ``cargo-lite build`` to build
 your crate. It will output the build artifacts in the same place as running
-``rustc src/main.rs`` would. For more complex projects, ``cargo-lite.py``
+``rustc src/main.rs`` would. For more complex projects, ``cargo-lite``
 accepts the following directives::
 
     subpackages = ["src/foo", "src/examples"]
     [build]
     build_cmd = "./build.sh"
 
-``cargo-lite.py`` will first recurse into the subpackages, installing those,
+``cargo-lite`` will first recurse into the subpackages, installing those,
 and will then run the ``build_cmd`` with the system's shell. The ``build_cmd``
 is expected to print one of two things::
 
@@ -88,7 +88,7 @@ is expected to print one of two things::
 
 For the first case, the listed artifacts will be copied into the depository.
 .. note:: the paths printed should be relative to the *repository root*.
-In the second, ``cargo-lite.py`` will run ``rustc`` on the given crate file
+In the second, ``cargo-lite`` will run ``rustc`` on the given crate file
 with the given args as if it were from a ``cargo-lite.conf``.
 
 .. _toml: https://github.com/mojombo/toml
