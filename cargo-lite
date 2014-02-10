@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # Copyright 2014 The Rust Project Developers. See LICENSE for more details.
 """cargo-lite, a dirt simple Rust package manager
 
