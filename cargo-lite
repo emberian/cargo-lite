@@ -141,7 +141,8 @@ def build(args, conf):
         b = conf['build']
         if 'crate_root' in b:
             crate_root = os.path.abspath(b['crate_root'])
-            output = rustc("--crate-file-name", "--rlib", "--staticlib", "--dylib", crate_root, _iter=True)
+            out_dir = os.path.dirname(crate_root)
+            output = rustc("--crate-file-name", "--crate-type=rlib,staticlib,dylib", crate_root, _iter=True)
             if output.exit_code != 0:
                 sys.stderr.write("--crate-file-name failed, status {}, stderr:\n".format(output.exit_code))
                 sys.stderr.write(str(output))
@@ -155,11 +156,11 @@ def build(args, conf):
 
             args = b.get('rustc_args', [])
             args.append(crate_root)
-            args.append("--rlib")
-            args.append("--staticlib")
-            args.append("--dylib")
+            args.append("--crate-type=rlib,staticlib,dylib")
             args.append("-L")
             args.append(libdir())
+            args.append("--out-dir")
+            args.append(out_dir)
             output = rustc(*args)
 
             if output.exit_code != 0:
@@ -225,9 +226,7 @@ def buildcmd(args):
         args.append(b["crate_root"])
         args.append("-L")
         args.append(libdir())
-        args.append("--rlib")
-        args.append("--staticlib")
-        args.append("--dylib")
+        args.append("--crate-type=rlib,staticlib,dylib")
         success(rustc(*args))
     elif "build_cmd" in b:
         # TODO: pass it libdir somehow, perhaps in env var?
