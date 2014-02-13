@@ -1,69 +1,61 @@
 #!/usr/bin/env python
 # Copyright 2014 The Rust Project Developers. See LICENSE for more details.
+
 """cargo-lite, a dirt simple Rust package manager
 
 Usage:
-  cargo-lite.py install [--git | --hg | --local] [<path>] [<package>]
+  cargo-lite.py install [--git | --hg | --local] [--pkgname=<package>] [<path>]
   cargo-lite.py build [<path>]
+  cargo-lite.py update [--force] [<package>]
   cargo-lite.py --version
 
 Options:
+  install       Install a package, copying its build output to the library
+                directory
+  build         Build the contents of a package, installing any dependencies
+  update        Re-fetch dependencies of a package, and rebuild it if the
+                rustc version has changed, or if --force is given
   -h --help     Show this screen.
-  --git         Fetch source using git (inferred if <package> ends in .git)
-  --hg          Fetch source using hg (never inferred)
+  --db=<db>     Location of the database where all package metadata is stored
+  --git         Fetch source using git
+  --hg          Fetch source using hg
+  --local       Copy source from local directory
   --version     Show version.
-
 """
 
-import sys
 import os
+import sys
 import shutil
 
+from glob import glob
+from tempfile import mkdtemp
+try:
+    from urlparse import urlparse
+except ImportError:
+    # python 3
+    from urllib.parse import urlparse
+from datetime import datetime
+
+import toml
 from docopt import docopt
-try:
-    from sh import git
-except ImportError:
-    def git(*args, **kwargs):
-        sys.stderr.write("git not installed, but asked for!\n")
-        sys.exit(1)
-try:
-    from sh import hg
-except ImportError:
-    def hg(*args, **kwargs):
-        sys.stderr.write("hg not installed, but asked for!\n")
-        sys.exit(1)
-try:
-    from sh import rustc
-except ImportError:
-    sys.stderr.write("cargo-lite.py requires rustc to be installed\n")
+
+VERSION = "cargo-lite 0.2.0"
+tempdirs = []
+
+def _error(msg):
+    sys.stderr.write(msg)
+    if not msg.endswith("\n"):
+        sys.stderr.write("\n")
+
+def _fatal_error(msg):
+    _error(msg)
     sys.exit(1)
 
-import sh
-import toml
+def _info(msg):
+    print(msg)
 
-VERSION = 'cargo-lite.py 0.1.0'
-
-
-def expand(path):
-    return os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
-
-
-def repodir():
-    return expand("~/.rust")
-
-
-def libdir():
-    dr = expand(os.path.join(repodir(), "lib"))
-    if not os.path.exists(dr):
-        os.makedirs(dr)
-    return dr
-
-
-def from_pkgdir(path):
-    path = expand(os.path.join(path, "cargo-lite.conf"))
-    if not os.path.exists(path):
-        raise Exception("{} does not exist".format(path))
-    return toml.loads(open(path).read())
+def _note(msg):
+    print(msg)
 
 
 class cd:
@@ -81,167 +73,350 @@ class cd:
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
 
+try:
+    from sh import git
+except ImportError:
+    def git(*args, **kwargs):
+        _fatal_error("git not installed, but request")
 
-def success(output):
-    if output.exit_code != 0:
-        sys.stderr.write("command failed: {}".format(str(output)))
-        sys.exit(1)
+try:
+    from sh import hg
+except ImportError:
+    def hg(*args, **kwargs):
+        _fatal_error("hg not installed, but was requested")
 
-
-def fetch(args):
-    "Fetch a package's source, returning the path to it"
-
-    if args["<path>"] is None:
-        dest = os.path.join(repodir(), os.path.split(expand("."))[-1])
-        if os.path.exists(dest):
-            print("Already found fetched copy of cwd, skipping")
-            return dest
-        shutil.copytree(expand("."), dest)
-        return dest
-
-    path = args['<path>']
-
-    local = args['--local']
-    use_git = args['--git']
-    use_hg = args['--hg']
-
-    pkg = args['<package>']
-    if pkg is None:
-        pkg, ext = os.path.splitext(os.path.basename(path))
+try:
+    from sh import rustc
+except ImportError:
+    _fatal_error("cargo-lite.py requires rustc to be installed\n")
 
 
-    if not use_hg and not use_git and not local:
-        if path.endswith('.git'):
-            use_git = True
-        else:
-            sys.stderr.write("error: neither --git nor --hg given, and can't infer from package path\n")
-            os.exit(1)
-    dest = os.path.join(expand(repodir()), pkg)
-    if os.path.exists(dest):
-        print("Already found fetched copy of {}, skipping".format(pkg))
-        return dest
-
-    if local:
-        shutil.copytree(expand(path), dest)
-    elif git:
-        git.clone(path, dest)
-    elif hg:
-        hg.clone(path, dest)
-    return dest
+def _expand(path):
+    "Fully expand a path, including symlink resolution"
+    return os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
 
 
-def build(args, conf):
-    if 'subpackages' in conf:
-        s = conf['subpackages']
-        for subpackage in s:
+class PackageConfig(object):
+    """A cargo-lite.conf
+
+    This holds metadata about a package, such as its dependencies and how to
+    build it, as well as carrying out those actions.
+    """
+    def __init__(self, path, pkgname):
+        """Create a new PackageConfig from a file
+
+        :param str path The directory where the cargo-lite.conf will be found,
+                        or a path to the file that should be used instead.
+        :param pkgname Package this PackageConfig is being used on behalf of
+        """
+        if os.path.isdir(path):
+            path = os.path.join(path, "cargo-lite.conf")
+
+        self.path = path
+        self.pkgname = pkgname
+        self.raw = toml.loads(open(path).read())
+
+    def install_deps(self):
+        for dep in self.raw.get("deps", []):
+            dep.insert(0, "install")
+            main(docopt(__doc__, version=VERSION, argv=dep))
+
+    def build(self, db, args=None, into_cwd=False):
+        """Build a package.
+
+        :param Database db Database to use for dependencies and config
+        :param list args Extra args to pass to rustc
+        :returns The directory where the build artifacts are stored
+        """
+        if args is None:
+            args = []
+
+        lds = []
+        sp = False
+        for subpackage in self.raw.get("subpackages", []):
             with cd(subpackage):
-                build(args, from_pkgdir("."))
+                lds.append(PackageConfig(".", self.pkgname).install(db, args))
+                sp = True
 
-    if 'build' in conf:
-        b = conf['build']
-        if 'crate_root' in b:
-            crate_root = os.path.abspath(b['crate_root'])
-            out_dir = os.path.dirname(crate_root)
-            output = rustc("--crate-file-name", "--crate-type=rlib,staticlib,dylib", crate_root, _iter=True)
-            if output.exit_code != 0:
-                sys.stderr.write("--crate-file-name failed, status {}, stderr:\n".format(output.exit_code))
-                sys.stderr.write(str(output))
-                sys.exit(1)
+        if not "build" in self.raw and not sp:
+            _fatal_error("no build information in {}".format(self.path))
+        elif sp:
+            return ""
 
-            names = list(output)
+        b = self.raw["build"]
+        if not into_cwd:
+            ld = mkdtemp(dir=_expand(db.conf["tempdir"]),
+                    prefix=".cargo-lite")
+            tempdirs.append(ld)
 
-            if all([os.path.exists(os.path.join(libdir(), x)) for x in names if x != ""]):
-                print("all artifacts present, not rebuilding (TODO: add way to rebuild)")
-                return
+        ctype = "--crate-type=rlib,dylib,staticlib"
 
-            args = b.get('rustc_args', [])
-            args.append(crate_root)
-            args.append("--crate-type=rlib,staticlib,dylib")
-            args.append("-L")
-            args.append(libdir())
-            args.append("--out-dir")
-            args.append(out_dir)
+        if "crate_root" in b:
+            crate_root = b["crate_root"]
+            if into_cwd:
+                ld = os.path.dirname(crate_root)
+
+            args += b.get("rustc_args", [])
+            args.extend([crate_root, ctype, "-L", ld, "--out-dir", ld])
             output = rustc(*args)
-
             if output.exit_code != 0:
-                sys.stderr.write("building {} with rustc failed with status {}, output:\n".format(crate_root, output.exit_code))
-                sys.stderr.write(str(output))
-                sys.exit(1)
-            for fname in [x.strip() for x in [x for x in names if x != '']]:
-                shutil.copy(os.path.join(os.path.dirname(crate_root), fname), libdir())
-
-        elif 'build_cmd' in b:
+                _fatal_error("building {} with rustc failed with status {},\
+                        output: {}\n".format(crate_root, output.exit_code,
+                            str(output)))
+        elif "build_cmd" in b:
             try:
-                out = sh.Command(b["build_cmd"])()
+                env = os.environ.copy()
+                if into_cwd:
+                    ld = "."
+                env["CARGO_OUT_DIR"] = ld
+                args += b.get("rustc_args", [])
+                args.extend([ctype, "-L", ld])
+                env["CARGO_RUSTFLAGS"] = args
+
+                out = sh.Command(b["build_cmd"])(_env=env)
             except sh.ErrorReturnCode as e:
-                print("The build command for {} failed with exit code {}".format(
-                        args['<path>'], e.exit_code))
-                print(e.message)
-                sys.exit(1)
-            if not out.startswith("cargo-lite: "):
-                raise Exception("malformed output in build_cmd's stdout")
-            if out.startswith("cargo-lite: artifacts"):
-                for artifact in [x for x in out.split("\n")[1:] if x != ""]:
-                    shutil.copy(artifact, libdir())
-            elif out.startswith("carg-lite: crate_root="):
-                args = dict(args)
-                del args["build"]["build_cmd"]
-                args["build"]["crate_root"] = out.replace("cargo-lite: crate_root=", "")
-                install(args)
-            else:
-                sys.stderr.write(str(out))
-                sys.stderr.write("unrecognized directive in build_cmd output\n")
-                sys.exit(1)
+                _error("The build command for {} failed with exit code {}"
+                        .format( args['<path>'], e.exit_code))
+                _fatal_error(e.message)
         else:
-            raise Exception("unrecognized build information in cargo-lite.conf")
-    elif not 'subpackages' in conf:
-        raise Exception("no build information in cargo-lite.conf!")
+            _fatal_error("no recognized build options in {}"
+                    .format(self.path))
+
+        lds.append(ld)
+        return lds
+
+    def install(self, db, args=None):
+        """Build and install the artifacts
+
+        Arguments are the same as build.
+        :returns files that were installed
+        """
+
+        self.install_deps()
+        ds = self.build(db, args)
+        inst = []
+        for d in ds:
+            for f in os.listdir(d):
+                shutil.copy(os.path.join(d, f), _expand(db.conf["libdir"]))
+                inst.append(f)
+
+        return inst
 
 
-def install_deps(args, conf):
-    for dep in conf.get('deps', []):
-        # whee prepend!
-        dep.insert(0, 'install')
-        install(docopt(__doc__, version=VERSION, argv=dep))
+class Database(object):
+    def __init__(self, path="~/.cargo_lite.db"):
+        path = _expand(path)
+        if not os.path.exists(path):
+            self.init_db(path)
+
+        self.db = toml.loads(open(path).read())
+        self.conf = self.load_conf()
+        self._path = path
+
+    def __contains__(self, pkgname):
+        return pkgname in self.db["packages"]
+
+    def init_db(self, path):
+        init = {"packages": [], "cfgfile": _expand("~/.cargo_lite.conf") }
+        toml.dump(init, open(path, "w"))
+
+    def load_conf(self):
+        cfgfile = _expand(self.db["cfgfile"])
+
+        if not os.path.exists(cfgfile):
+            try:
+                os.makedirs(os.path.dirname(cfgfile))
+            except OSError:
+                pass
+            init = {"srcdir": _expand("~/.rust/src"), "libdir":
+                    _expand("~/.rust/lib"), "tempdir": "/tmp"}
+            with open(cfgfile, "w") as f:
+                toml.dump(init, f)
+            self.conf = init
+        else:
+            self.conf = toml.loads(open(cfgfile).read())
+
+        return self.conf
+
+    def save(self):
+        toml.dump(self.db, open(self._path, "w"))
+        toml.dump(self.conf, open(_expand(self.db["cfgfile"]), "w"))
 
 
-def install(args):
-    path = fetch(args)
-    conf = from_pkgdir(path)
-    install_deps(args, conf)
+def pkgname_from_path(path):
+    """Get a package name from a path.
 
-    with cd(path):
-        build(args, conf)
+    The package name of a path is the last element, sans its possible
+    extension. This takes /foo/bar/baz.git and turns it into baz
+    """
+    pkg, ext = os.path.splitext(os.path.basename(_expand(path)))
+    return pkg
 
 
-def buildcmd(args):
-    p = args["<path>"]
-    if p is None:
-        p = os.getcwd()
-    conf = from_pkgdir(p)
-    install_deps(args, conf)
-    b = conf["build"]
-    if "crate_root" in b:
-        args = b.get("rustc_args", [])
-        args.append(b["crate_root"])
-        args.append("-L")
-        args.append(libdir())
-        args.append("--crate-type=rlib,staticlib,dylib")
-        success(rustc(*args))
-    elif "build_cmd" in b:
-        # TODO: pass it libdir somehow, perhaps in env var?
-        success(sh.Command(b["build_cmd"])())
+class Package(object):
+    """ A package.
+
+    A package is a bundle of code which can be fetched from some source (git,
+    hg, or a local directory). All packages have a name, and their existence
+    is recorded in a database.
+
+    This class represents a package that may or may not have been fetched yet
+    """
+
+    def __init__(self, pkgname, db, fetch_with=None, fetch_from=None):
+        """ Create a package
+
+        :param str pkgname Name of the package
+        :param Database db Database to record this package's information in
+        :param str fetch_with How to fetch this package (git, hg, local)
+        :param str fetch_from Where to fetch this package from (URL or path)
+        """
+        self.pkgname = pkgname
+        self.fetch_with = fetch_with
+        self.fetch_from = fetch_from
+        self.db = db
+        self.cwd = _expand(os.getcwd()) # used for local w/o fetch_from
+        if pkgname in db:
+            self.fetch_with = db[pkgname]["fetch_with"]
+            if self.fetch_with == "":
+                del self.fetch_with
+            self.fetch_from = db[pkgname]["fetch_from"]
+            if self.fetch_from == "":
+                del self.fetch_from
+
+    def _infer_fetched_name(self):
+        "Try to guess what to fetch a package with based on fetch_from"
+        # explicitly given?
+        if self.fetch_with is not None:
+            return self.fetch_with
+        ff = self.fetch_from
+
+        # in URI?
+        url = urlparse(ff)
+        if "git" in url.scheme:
+            return "git"
+        elif "hg" in url.scheme:
+            return "hg"
+
+        # .git ?
+        if ff.endswith('.git'):
+            return "git"
+
+        # does the path exist?
+        if os.path.exists(ff):
+            return "local"
+
+        _error("Could not guess what to fetch {} with".format(self.pkgname))
+
+    def fetch(self):
+        """ Fetch the source unconditionally.
+
+        This will clobber anything that was already in the destination
+        directory.
+        """
+        fetch_with = self._infer_fetched_name()
+        ffrom = self.fetch_from
+
+        srcdir = _expand(self.db.conf["srcdir"])
+
+        if ffrom is None:
+            _info("Fetching from cwd ({})".format(self.cwd))
+            ffrom = _expand(self.cwd)
+
+        dest = os.path.join(_expand(srcdir), self.pkgname)
+        self.dest = dest
+
+        if os.path.exists(dest):
+            shutil.rmtree(dest)
+
+        if fetch_with == "local":
+            shutil.copytree(ffrom, dest)
+        elif fetch_with == "git":
+            git.clone(ffrom, dest)
+        elif fetch_with == "hg":
+            hg.clone(ffrom, dest)
+        else:
+            _fatal_error("Unknown fetch method {}".format(fetch_with))
+
+        self.save_fetchinfo()
+        return dest
+
+    def save_fetchinfo(self):
+        db = {}
+        db["fetch_with"] = self.fetch_with or ""
+        db["fetch_from"] = self.fetch_from or ""
+        db["dest"] = self.dest
+
+        self.db.db[self.pkgname] = db
+
+    def build(self):
+        d = self.dest
+
+        with cd(d):
+            return PackageConfig(".", self.pkgname).build(self.db)
+
+    def install(self):
+        d = self.dest
+        with cd(d):
+            v = PackageConfig(".", self.pkgname).install(self.db)
+
+        db = self.db.db[self.pkgname]
+        db["artifacts"] = v
+        db["built_with"] = str(rustc("--version"))
+        db["build_date"] = datetime.now()
+
+        return v
+
+
+def infer_pkgname_from_dir(path):
+    # take the last path entry and split out any extension
+    pkgname, _ext = os.path.splitext(os.path.basename(_expand(path)))
+
+    _note("Inferred pkgname {} from path {}".format(pkgname, path))
+    return pkgname
+
+
+def main(opts):
+    if "--db" in opts:
+        db = Database(opts["<db>"])
     else:
-        sys.stderr.write("unrecognized build information in cargo-lite.conf")
-        sys.exit(1)
+        db = Database()
 
+    if opts["install"]:
+        if opts["--git"]:
+            fetch_with = "git"
+        elif opts["--hg"]:
+            fetch_with = "hg"
+        elif opts["--local"]:
+            fetch_with = "local"
+        else:
+            fetch_with = None
 
-if __name__ == '__main__':
-    arguments = docopt(__doc__, version=VERSION)
-    if arguments['install']:
-        install(arguments)
-    elif arguments['build']:
-        buildcmd(arguments)
+        path = opts.get("<path>", os.getcwd())
+        if path is None:
+            path = os.getcwd()
+
+        if opts["--pkgname"]:
+            pkgname = opts["<package>"]
+        else:
+            pkgname = infer_pkgname_from_dir(path)
+
+        pkg = Package(pkgname, db, fetch_with, path)
+        dest = pkg.fetch()
+        pkg.install()
+    elif opts["build"]:
+        PackageConfig(opts["<path>"] or ".",
+                "<nopkg-cwd>").build(db, into_cwd=True)
+    elif opts["update"]:
+        _fatal_error("update unimplemented")
     else:
-        sys.stderr.write("unsupported command or command NYI")
-        sys.exit(1)
+        _fatal_error("unrecognized command")
+
+    db.save()
+
+if __name__ == "__main__":
+    opts = docopt(__doc__, version=VERSION)
+    main(opts)
+    for d in tempdirs:
+        shutil.rmtree(d)
+

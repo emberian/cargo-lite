@@ -1,5 +1,5 @@
 =================
-cargo-lite v0.1.0
+cargo-lite v0.2.0
 =================
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
@@ -63,7 +63,7 @@ directive to the build section to add flags::
 
     [build]
     crate_root = "src/main.rs"
-    rustc_args = ["-Z", "prefer-dynamic"]
+    rustc_args = ["-C", "prefer-dynamic"]
 
 And that's it, for simple crates! You can use ``cargo-lite build`` to build
 your crate. It will output the build artifacts in the same place as running
@@ -74,22 +74,12 @@ accepts the following directives::
     [build]
     build_cmd = "./build.sh"
 
-``cargo-lite`` will first recurse into the subpackages, installing those,
-and will then run the ``build_cmd`` with the system's shell. The ``build_cmd``
-is expected to print one of two things::
-
-    cargo-lite: artifacts
-    libfoo-hash.rlib
-    libbar-hash.so
-
-    # or
-
-    cargo-lite: crate_root="src/main.rs",rustc_args=[...]
-
-For the first case, the listed artifacts will be copied into the depository.
-.. note:: the paths printed should be relative to the *repository root*.
-In the second, ``cargo-lite`` will run ``rustc`` on the given crate file
-with the given args as if it were from a ``cargo-lite.conf``.
+``cargo-lite.py`` will first recurse into the subpackages, installing those,
+and will then run the ``build_cmd`` with the system's shell. Two environment
+variables will be added, which the ``build_cmd`` is expected to respect:
+``CARGO_OUT_DIR``, which is where artifacts that to be installed must be
+copied to, and ``CARGO_RUSTFLAGS``, which should be passed to rustc for all
+artifacts that are copied into ``CARGO_OUT_DIR``.
 
 .. _toml: https://github.com/mojombo/toml
 .. _gl-rs: https://github.com/bjz/gl-rs
