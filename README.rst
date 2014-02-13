@@ -55,14 +55,14 @@ build them, copying their build artifacts into the package depository
 additional section in the ``cargo-lite.conf``::
 
     [build]
-    crate_file = "src/main.rs"
+    crate_root = "src/main.rs"
 
 This tells ``cargo-lite`` to run ``rustc`` on ``src/main.rs``. It will pass
 it the proper ``-L`` to link to its dependencies. You can add an additional
 directive to the build section to add flags::
 
     [build]
-    crate_file = "src/main.rs"
+    crate_root = "src/main.rs"
     rustc_args = ["-Z", "prefer-dynamic"]
 
 And that's it, for simple crates! You can use ``cargo-lite build`` to build
