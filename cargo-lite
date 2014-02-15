@@ -153,7 +153,11 @@ class PackageConfig(object):
                          prefix=".cargo-lite")
             tempdirs.append(ld)
 
-        ctype = "--crate-type=rlib,dylib,staticlib"
+        ct = b.get("crate_type", "binary")
+        if ct == "binary":
+            ctype = "--crate-type=bin"
+        else:
+            ctype = "--crate-type=rlib,dylib,staticlib"
 
         if "crate_root" in b:
             crate_root = b["crate_root"]

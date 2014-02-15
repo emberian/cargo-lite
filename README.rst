@@ -67,8 +67,13 @@ directive to the build section to add flags::
 
 And that's it, for simple crates! You can use ``cargo-lite build`` to build
 your crate. It will output the build artifacts in the same place as running
-``rustc src/main.rs`` would. For more complex projects, ``cargo-lite``
-accepts the following directives::
+``rustc src/main.rs`` would. For building a library, you need to do::
+
+    [build]
+    crate_root = "src/lib.rs"
+    crate_type = "library"
+
+For more complex projects, ``cargo-lite`` accepts the following directives::
 
     subpackages = ["src/foo", "src/examples"]
     [build]
@@ -79,7 +84,9 @@ and will then run the ``build_cmd`` with the system's shell. Two environment
 variables will be added, which the ``build_cmd`` is expected to respect:
 ``CARGO_OUT_DIR``, which is where artifacts that to be installed must be
 copied to, and ``CARGO_RUSTFLAGS``, which should be passed to rustc for all
-artifacts that are copied into ``CARGO_OUT_DIR``.
+artifacts that are copied into ``CARGO_OUT_DIR``. The ``CARGO_RUSTFLAGS`` will
+include things like ``-L /path/where/cargo-lite/libs/are/stored`` and
+optimization options.
 
 .. _toml: https://github.com/mojombo/toml
 .. _gl-rs: https://github.com/bjz/gl-rs
