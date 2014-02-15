@@ -42,17 +42,21 @@ from docopt import docopt
 VERSION = "cargo-lite 0.2.0"
 tempdirs = []
 
+
 def _error(msg):
     sys.stderr.write(msg)
     if not msg.endswith("\n"):
         sys.stderr.write("\n")
 
+
 def _fatal_error(msg):
     _error(msg)
     sys.exit(1)
 
+
 def _info(msg):
     print(msg)
+
 
 def _note(msg):
     print(msg)
@@ -121,7 +125,7 @@ class PackageConfig(object):
             dep.insert(0, "install")
             main(docopt(__doc__, version=VERSION, argv=dep))
 
-    def build(self, db, args=None, into_cwd=False):
+    def build(self, db, args=None, into_cwd=False, force=False):
         """Build a package.
 
         :param Database db Database to use for dependencies and config
@@ -146,7 +150,7 @@ class PackageConfig(object):
         b = self.raw["build"]
         if not into_cwd:
             ld = mkdtemp(dir=_expand(db.conf["tempdir"]),
-                    prefix=".cargo-lite")
+                         prefix=".cargo-lite")
             tempdirs.append(ld)
 
         ctype = "--crate-type=rlib,dylib,staticlib"
@@ -162,7 +166,7 @@ class PackageConfig(object):
             if output.exit_code != 0:
                 _fatal_error("building {} with rustc failed with status {},\
                         output: {}\n".format(crate_root, output.exit_code,
-                            str(output)))
+                                             str(output)))
         elif "build_cmd" in b:
             try:
                 env = os.environ.copy()
@@ -176,11 +180,11 @@ class PackageConfig(object):
                 out = sh.Command(b["build_cmd"])(_env=env)
             except sh.ErrorReturnCode as e:
                 _error("The build command for {} failed with exit code {}"
-                        .format( args['<path>'], e.exit_code))
+                       .format(args['<path>'], e.exit_code))
                 _fatal_error(e.message)
         else:
             _fatal_error("no recognized build options in {}"
-                    .format(self.path))
+                         .format(self.path))
 
         lds.append(ld)
         return lds
@@ -217,7 +221,7 @@ class Database(object):
         return pkgname in self.db["packages"]
 
     def init_db(self, path):
-        init = {"packages": [], "cfgfile": _expand("~/.cargo_lite.conf") }
+        init = {"packages": [], "cfgfile": _expand("~/.cargo_lite.conf")}
         toml.dump(init, open(path, "w"))
 
     def load_conf(self):
@@ -275,7 +279,7 @@ class Package(object):
         self.fetch_with = fetch_with
         self.fetch_from = fetch_from
         self.db = db
-        self.cwd = _expand(os.getcwd()) # used for local w/o fetch_from
+        self.cwd = _expand(os.getcwd())  # used for local w/o fetch_from
         if pkgname in db:
             self.fetch_with = db[pkgname]["fetch_with"]
             if self.fetch_with == "":
@@ -406,7 +410,7 @@ def main(opts):
         pkg.install()
     elif opts["build"]:
         PackageConfig(opts["<path>"] or ".",
-                "<nopkg-cwd>").build(db, into_cwd=True)
+                      "<nopkg-cwd>").build(db, into_cwd=True)
     elif opts["update"]:
         _fatal_error("update unimplemented")
     else:
