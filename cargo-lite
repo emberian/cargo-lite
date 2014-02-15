@@ -157,8 +157,10 @@ class PackageConfig(object):
         ct = b.get("crate_type", "binary")
         if ct == "binary":
             ctype = "--crate-type=bin"
-        else:
+        elif ct == "library":
             ctype = "--crate-type=rlib,dylib,staticlib"
+        else:
+            _fatal_error("Invalid crate_type: {}".format(ct))
 
         if "crate_root" in b:
             crate_root = b["crate_root"]
@@ -180,13 +182,14 @@ class PackageConfig(object):
                 env["CARGO_OUT_DIR"] = ld
                 args += b.get("rustc_args", [])
                 args.extend([ctype, "-L", ld])
-                env["CARGO_RUSTFLAGS"] = args
+                env["CARGO_RUSTFLAGS"] = " ".join(args)
 
                 out = sh.Command(b["build_cmd"])(_env=env)
             except sh.ErrorReturnCode as e:
                 _error("The build command for {} failed with exit code {}"
-                       .format(args['<path>'], e.exit_code))
-                _fatal_error(e.message)
+                       .format(self.pkgname, e.exit_code))
+                _error(e.message)
+                _fatal_error(e.stderr)
         else:
             _fatal_error("no recognized build options in {}"
                          .format(self.path))
