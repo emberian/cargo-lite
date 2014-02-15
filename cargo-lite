@@ -36,6 +36,7 @@ except ImportError:
     from urllib.parse import urlparse
 from datetime import datetime
 
+import sh
 import toml
 from docopt import docopt
 
