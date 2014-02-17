@@ -159,6 +159,8 @@ class PackageConfig(object):
         :param list args Extra args to pass to rustc
         :returns The directory where the build artifacts are stored
         """
+        self.install_deps()
+
         if args is None:
             args = []
 
@@ -229,7 +231,7 @@ class PackageConfig(object):
                     ld = "."
                 env["CARGO_OUT_DIR"] = ld
                 args += b.get("rustc_args", [])
-                args.extend([ctype, "-L", ld])
+                args.extend([ctype, "-L", db.conf["libdir"]])
                 env["CARGO_RUSTFLAGS"] = " ".join(args)
 
                 out = sh.Command(b["build_cmd"])(_env=env)
@@ -246,12 +248,13 @@ class PackageConfig(object):
                 ld = os.path.dirname(crate_root)
 
             args += b.get("rustc_args", [])
-            args.extend([crate_root, ctype, "-L", ld, "--out-dir", ld])
+            args.extend([crate_root, ctype, "-L", db.conf["libdir"], "--out-dir", ld])
             output = rustc(*args)
             if output.exit_code != 0:
-                _fatal_error("building {} with rustc failed with status {},\
+                _error("building {} with rustc failed with status {},\
                         output: {}\n".format(crate_root, output.exit_code,
                                              str(output)))
+                _fatal_error(e.stderr)
             built = True
 
         if built is False:
@@ -269,7 +272,6 @@ class PackageConfig(object):
         :returns files that were installed
         """
 
-        self.install_deps()
         ds = self.build(db, args, force)
         inst = []
         for d in ds:
@@ -489,7 +491,7 @@ def main(opts):
     else:
         _fatal_error("unrecognized command")
 
-    _info("done!")
+    _info("done one package!")
 
     db.save()
 
