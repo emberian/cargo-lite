@@ -315,6 +315,16 @@ class Database(object):
         else:
             self.conf = toml.loads(open(cfgfile).read())
 
+        try:
+            os.makedirs(self.conf["libdir"])
+        except OSError:
+            pass
+
+        try:
+            os.makedirs(self.conf["srcdir"])
+        except OSError:
+            pass
+
         return self.conf
 
     def save(self):
