@@ -421,8 +421,8 @@ class Package(object):
 
     def save_fetchinfo(self):
         db = self.db.db.get(self.pkgname, {})
-        db["fetch_with"] = getattr(self, "fetch_with", "")
-        db["fetch_from"] = getattr(self, "fetch_from", "")
+        db["fetch_with"] = getattr(self, "fetch_with", "") or ""
+        db["fetch_from"] = getattr(self, "fetch_from", "") or ""
         db["dest"] = self.dest
 
         self.db.db[self.pkgname] = db
