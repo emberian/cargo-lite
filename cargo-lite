@@ -364,7 +364,7 @@ class Package(object):
     def _infer_fetched_name(self):
         "Try to guess what to fetch a package with based on fetch_from"
         # explicitly given?
-        if hasattr(self, "fetch_with"):
+        if hasattr(self, "fetch_with") and not self.fetch_with is None:
             return self.fetch_with
         ff = self.fetch_from
 
