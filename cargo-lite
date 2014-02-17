@@ -6,7 +6,7 @@
 Usage:
   cargo-lite.py install [--git | --hg | --local] [--pkgname=<package>] [<path>]
   cargo-lite.py build [<path>]
-  cargo-lite.py update [--force] [<package>]
+  cargo-lite.py update [<package>]
   cargo-lite.py --version
 
 Options:
@@ -17,6 +17,7 @@ Options:
                 rustc version has changed, or if --force is given
   -h --help     Show this screen.
   --db=<db>     Location of the database where all package metadata is stored
+  --force       Force rebuilds, even if the source is up-to-date.
   --git         Fetch source using git
   --hg          Fetch source using hg
   --local       Copy source from local directory
@@ -39,12 +40,21 @@ from datetime import datetime
 import sh
 import toml
 from docopt import docopt
+from fnmatch import fnmatch
+from colorama import init, Fore
+# blake2 was selected due to its excellent performance characteristics,
+# support of tree hashing (should we chose to use it, eventually), and
+# its strength advantage over md5.
+from pyblake2 import blake2b as blake2
 
-VERSION = "cargo-lite 0.2.0"
+VERSION = "cargo-lite 0.3.0"
 tempdirs = []
+
+init()
 
 
 def _error(msg):
+    sys.stderr.write(Fore.RED + "error: " + Fore.RESET)
     sys.stderr.write(msg)
     if not msg.endswith("\n"):
         sys.stderr.write("\n")
@@ -56,11 +66,16 @@ def _fatal_error(msg):
 
 
 def _info(msg):
-    print(msg)
+    print(Fore.GREEN + "info: " + Fore.RESET + msg)
 
 
 def _note(msg):
-    print(msg)
+    print(Fore.YELLOW + "note: " + Fore.RESET + msg)
+
+
+def _debug(msg):
+    if "CARGO_DEBUG" in os.environ.keys():
+        print(msg)
 
 
 class cd:
@@ -101,6 +116,17 @@ def _expand(path):
     return os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
 
 
+def _hash_dir(globs, path):
+    state = blake2(digest_size=8)
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            for glob in globs:
+                if fnmatch(f, glob):
+                    _debug("{} matched {}, checking for hash".format(f, glob))
+                    state.update(str(os.path.getmtime(os.path.join(root, f))))
+    return state.hexdigest()
+
+
 class PackageConfig(object):
     """A cargo-lite.conf
 
@@ -117,7 +143,7 @@ class PackageConfig(object):
         if os.path.isdir(path):
             path = os.path.join(path, "cargo-lite.conf")
 
-        self.path = path
+        self.path = _expand(path)
         self.pkgname = pkgname
         self.raw = toml.loads(open(path).read())
 
@@ -140,15 +166,47 @@ class PackageConfig(object):
         sp = False
         for subpackage in self.raw.get("subpackages", []):
             with cd(subpackage):
-                lds.append(PackageConfig(".", self.pkgname).install(db, args))
+                lds.append(PackageConfig(".", self.pkgname + "/" + subpackage)
+                           .install(db, args, force))
                 sp = True
 
         if not "build" in self.raw and not sp:
             _fatal_error("no build information in {}".format(self.path))
         elif sp:
+            # subpackages, but no build section. this is ok.
             return ""
 
         b = self.raw["build"]
+
+        # self.path is path to conf, we want the directory
+        h = _hash_dir(b.get("hash_files", ["*.rs"]), os.path.dirname(self.path))
+
+        pdb = db.db.get(self.pkgname, {})
+        # see if we can skip the build
+        if force is False:
+            # have we been built before?
+            if self.pkgname in db:
+                _debug("{} built before, are we up-to-date?".format(self.pkgname))
+                # has the source changed?
+                if h == pdb.get("dir_hash", ""):
+                    _debug("we have the same hash {}...".format(h))
+                    # even if it hasn't, has rustc been upgraded?
+                    if pdb["built_with"] == str(rustc("--version")):
+                        # all set, let's skip it
+                        _debug("skipping build for {}".format(self.pkgname))
+                        return []
+                else:
+                    # ok, we need to rebuild
+                    _debug("continuing build, hash was {}, old was {}"
+                           .format(h, pdb.get("dir_hash", "unset")))
+                    pass
+
+        pdb = db.db.get(self.pkgname, {})
+        pdb["dir_hash"] = h
+        pdb["built_with"] = str(rustc("--version"))
+        pdb["build_date"] = datetime.now()
+        db.db[self.pkgname] = pdb
+
         if not into_cwd:
             ld = mkdtemp(dir=_expand(db.conf["tempdir"]),
                          prefix=".cargo-lite")
@@ -162,19 +220,9 @@ class PackageConfig(object):
         else:
             _fatal_error("Invalid crate_type: {}".format(ct))
 
-        if "crate_root" in b:
-            crate_root = b["crate_root"]
-            if into_cwd:
-                ld = os.path.dirname(crate_root)
+        built = False
 
-            args += b.get("rustc_args", [])
-            args.extend([crate_root, ctype, "-L", ld, "--out-dir", ld])
-            output = rustc(*args)
-            if output.exit_code != 0:
-                _fatal_error("building {} with rustc failed with status {},\
-                        output: {}\n".format(crate_root, output.exit_code,
-                                             str(output)))
-        elif "build_cmd" in b:
+        if "build_cmd" in b:
             try:
                 env = os.environ.copy()
                 if into_cwd:
@@ -190,14 +238,31 @@ class PackageConfig(object):
                        .format(self.pkgname, e.exit_code))
                 _error(e.message)
                 _fatal_error(e.stderr)
-        else:
+            built = True
+
+        if "crate_root" in b:
+            crate_root = b["crate_root"]
+            if into_cwd:
+                ld = os.path.dirname(crate_root)
+
+            args += b.get("rustc_args", [])
+            args.extend([crate_root, ctype, "-L", ld, "--out-dir", ld])
+            output = rustc(*args)
+            if output.exit_code != 0:
+                _fatal_error("building {} with rustc failed with status {},\
+                        output: {}\n".format(crate_root, output.exit_code,
+                                             str(output)))
+            built = True
+
+        if built is False:
             _fatal_error("no recognized build options in {}"
                          .format(self.path))
 
         lds.append(ld)
+        db.save()
         return lds
 
-    def install(self, db, args=None):
+    def install(self, db, args=None, force=False):
         """Build and install the artifacts
 
         Arguments are the same as build.
@@ -205,7 +270,7 @@ class PackageConfig(object):
         """
 
         self.install_deps()
-        ds = self.build(db, args)
+        ds = self.build(db, args, force)
         inst = []
         for d in ds:
             for f in os.listdir(d):
@@ -226,10 +291,10 @@ class Database(object):
         self._path = path
 
     def __contains__(self, pkgname):
-        return pkgname in self.db["packages"]
+        return pkgname in self.db
 
     def init_db(self, path):
-        init = {"packages": [], "cfgfile": _expand("~/.cargo_lite.conf")}
+        init = {"cfgfile": _expand("~/.cargo_lite.conf")}
         toml.dump(init, open(path, "w"))
 
     def load_conf(self):
@@ -289,17 +354,17 @@ class Package(object):
         self.db = db
         self.cwd = _expand(os.getcwd())  # used for local w/o fetch_from
         if pkgname in db:
-            self.fetch_with = db[pkgname]["fetch_with"]
+            self.fetch_with = db.db[pkgname]["fetch_with"]
             if self.fetch_with == "":
                 del self.fetch_with
-            self.fetch_from = db[pkgname]["fetch_from"]
+            self.fetch_from = db.db[pkgname]["fetch_from"]
             if self.fetch_from == "":
                 del self.fetch_from
 
     def _infer_fetched_name(self):
         "Try to guess what to fetch a package with based on fetch_from"
         # explicitly given?
-        if self.fetch_with is not None:
+        if hasattr(self, "fetch_with"):
             return self.fetch_with
         ff = self.fetch_from
 
@@ -339,6 +404,7 @@ class Package(object):
         self.dest = dest
 
         if os.path.exists(dest):
+            # TODO: git pull, hg whatever, etc, instead of re-cloning
             shutil.rmtree(dest)
 
         if fetch_with == "local":
@@ -354,28 +420,26 @@ class Package(object):
         return dest
 
     def save_fetchinfo(self):
-        db = {}
-        db["fetch_with"] = self.fetch_with or ""
-        db["fetch_from"] = self.fetch_from or ""
+        db = self.db.db.get(self.pkgname, {})
+        db["fetch_with"] = getattr(self, "fetch_with", "")
+        db["fetch_from"] = getattr(self, "fetch_from", "")
         db["dest"] = self.dest
 
         self.db.db[self.pkgname] = db
 
-    def build(self):
+    def build(self, force=False):
         d = self.dest
 
         with cd(d):
-            return PackageConfig(".", self.pkgname).build(self.db)
+            return PackageConfig(".", self.pkgname).build(self.db, force=force)
 
-    def install(self):
+    def install(self, force=False):
         d = self.dest
         with cd(d):
-            v = PackageConfig(".", self.pkgname).install(self.db)
+            v = PackageConfig(".", self.pkgname).install(self.db, force=force)
 
         db = self.db.db[self.pkgname]
-        db["artifacts"] = v
-        db["built_with"] = str(rustc("--version"))
-        db["build_date"] = datetime.now()
+        db["installed_artifacts"] = v
 
         return v
 
@@ -394,7 +458,10 @@ def main(opts):
     else:
         db = Database()
 
-    if opts["install"]:
+    force = opts.get("--force", False)
+
+    if opts["install"] or opts["update"]:
+        # install and update really are the same thing!
         if opts["--git"]:
             fetch_with = "git"
         elif opts["--hg"]:
@@ -415,14 +482,14 @@ def main(opts):
 
         pkg = Package(pkgname, db, fetch_with, path)
         dest = pkg.fetch()
-        pkg.install()
+        pkg.install(force=force)
     elif opts["build"]:
         PackageConfig(opts["<path>"] or ".",
-                      "<nopkg-cwd>").build(db, into_cwd=True)
-    elif opts["update"]:
-        _fatal_error("update unimplemented")
+                      "<nopkg-cwd>").build(db, into_cwd=True, force=force)
     else:
         _fatal_error("unrecognized command")
+
+    _info("done!")
 
     db.save()
 
@@ -431,4 +498,3 @@ if __name__ == "__main__":
     main(opts)
     for d in tempdirs:
         shutil.rmtree(d)
-

@@ -1,18 +1,16 @@
 =================
-cargo-lite v0.2.0
+cargo-lite v0.3.0
 =================
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
 designed and implemented, intended to have something that "just works" until
-there is a package manager that works reliably and well. It depends on sh_,
-docopt, and toml. This isn't intended to grow into a production-quality
-package manager.
+there is a package manager that works reliably and well. This isn't intended
+to grow into a production-quality package manager.
 
-What does it do? It fetches dependencies and builds them. Eventually it will
-be able to update deps by fetching from hg/git, and also when rustc version
-changes. That's it. That's all it does. No fancy configurable package script
-(a la rustpkg), no fancy only-rebuild-what-is-necessary, no handling of cyclic
-dependencies, etc.
+What does it do? It fetches dependencies and builds them. It can fetch from
+git, hg, or local directories. It doesn't do any handling of versions etc. It
+will rebuild when dependencies change, as well as when rustc's version
+changes.
 
 Installation
 ------------
@@ -23,16 +21,11 @@ Install using distutils::
     cd cargo-lite
     sudo python setup.py install
 
-That should pull in the dependencies for you. Otherwise, copy
-``cargo-lite`` into a directory in your PATH and make sure you have the
-deps installed.
-
 Getting Help
 ------------
 
-You can find me on irc.mozilla.org as ``cmr``. It's probably best to ask for
-help in ``#rust-gamedev``, since that's mostly what has spurred me to work on
-this project.
+You can find me on ``irc.mozilla.org`` as ``cmr``. Look for me
+``#rust-gamedev``.
 
 =========================
 How To Use ``cargo-lite``
@@ -44,7 +37,7 @@ list::
 
     deps = [
         ["--git", "http://github.com/bjz/gl-rs.git"]
-    ,   ["--git", "http://github.com/bjz/glfw-rs.git"] # bjz so amaze?
+    ,   ["--git", "http://github.com/bjz/glfw-rs.git"]
     ]
 
 This specifies two dependencies: gl-rs_ and glfw-rs_. It specifies that they
@@ -93,6 +86,55 @@ optimization options.
 .. _glfw-rs: https://github.com/bjz/glfw-rs
 .. _sh: http://amoffat.github.io/sh/index.html
 
+===========================
+``cargo-lite.conf`` details
+===========================
+
+Top-level attributes
+--------------------
+
+``subpackages``
+    A list of directories, relative to the directory this ``cargo-lite.conf``
+    is in, to recurse into and install. Note that subpackages installed
+    *unconditionally*, and cannot fetch their source from a remote source.
+    They provide a way to structure a single repository that has multiple
+    crates in it. Subpackages are processed in order, and before any build
+    instructions in ``build`` are executed.
+
+``build`` section
+------------------
+
+The ``build`` section describes how to build a package. If there are defined
+subpackages, this is optional. Otherwise, it is required. It has the following
+sub-attributes:
+
+``crate_root``
+    A string. If specified, ``rustc`` will be invoked on this file, using the
+    correct arguments (given the ``crate_type`` and ``rustc_args``).
+``crate_type``
+    A string. Either "binary" or "library". Specifies whether the crate is to
+    be built as a library or executable binary. Optional, the default is
+    "binary".
+``rustc_args``
+    A list of strings. If specified, these arguments will be passed on to
+    ``rustc`` when ``crate_root`` is specified, or joined with a single space
+    and exported in the ``CARGO_RUSTFLAGS`` environment variable if
+    ``build_cmd`` is specified.
+``hash_files``
+    A list of strings. If specified, any files matching any of these globs
+    will be hashed as part of determining whether a package should be rebuilt
+    or not. By default, only ``*.rs`` is considered. Do note that this is, by
+    nature, a quadratic algorithm. Take care not to specify many globs, and
+    specifying the most common globs first. Since, on every build, every
+    file in every dependency is hashed,
+
+    Only ``mtime`` is hashed, to try and keep time down. Due to the crate
+    model, fine-grained dependency tracking isn't particularly useful.
+
+At least one of ``crate_root`` and ``build_cmd`` must be specified. If both
+are specified, the ``build_cmd`` is run first, allowing for custom code
+generation. If neither is specified, processing will halt, and an error will
+be printed.
 
 ===
 FAQ
@@ -114,8 +156,6 @@ todo
 ----
 
 - store rustc version lib built with
-- configurable repodir + libdir
-- per-project repos (like rustpkg's workspaces)
 - rebuild deps when they change (generate make files? see https://gist.github.com/csherratt/8627881)
 
 non-goals
