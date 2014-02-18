@@ -367,12 +367,14 @@ class Package(object):
         self.db = db
         self.cwd = _expand(os.getcwd())  # used for local w/o fetch_from
         if pkgname in db:
+            _debug("pulling out info from db")
             self.fetch_with = db.db[pkgname]["fetch_with"]
             if self.fetch_with == "":
                 del self.fetch_with
             self.fetch_from = db.db[pkgname]["fetch_from"]
             if self.fetch_from == "":
                 del self.fetch_from
+            self.dest = db.db[pkgname]["dest"]
 
     def _infer_fetched_name(self):
         "Try to guess what to fetch a package with based on fetch_from"
@@ -398,7 +400,7 @@ class Package(object):
 
         _error("Could not guess what to fetch {} with".format(self.pkgname))
 
-    def fetch(self, force_update=False):
+    def fetch(self, update=False):
         """ Fetch the source unconditionally.
 
         This will clobber anything that was already in the destination
@@ -417,16 +419,16 @@ class Package(object):
         self.dest = dest
 
 
-        if os.path.exists(dest) and force_update:
-            # TODO: git pull, hg whatever, etc, instead of re-cloning
-            if fetch_with == "git":
-                git("-C", dest, "pull", "origin", "master")
-            elif fetch_with == "hg":
-                hg.pull("--cwd", dest, "--force", "--update")
-            elif fetch_with == "local":
-                dir_util.copy_tree(ffrom, dest)
-        elif not force_update:
-            return dest
+        try:
+            if os.path.exists(dest):
+                if fetch_with == "git":
+                    git("-C", dest, "pull", "origin", "master")
+                elif fetch_with == "hg":
+                    hg.pull("--cwd", dest, "--force", "--update")
+                elif fetch_with == "local":
+                    dir_util.copy_tree(ffrom, dest)
+        except:
+            shutil.rmtree(dest)
 
         if fetch_with == "local":
             shutil.copytree(ffrom, dest)
@@ -439,6 +441,20 @@ class Package(object):
 
         self.save_fetchinfo()
         return dest
+
+    def update(self):
+        fetch_with = self.fetch_with
+        dest = self.dest
+
+        if fetch_with == "git":
+            git("-C", dest, "pull", "origin", "master")
+        elif fetch_with == "hg":
+            hg.pull("--cwd", dest, "--force", "--update")
+        elif fetch_with == "local":
+            dir_util.copy_tree(ffrom, dest)
+
+        return dest
+
 
     def save_fetchinfo(self):
         db = self.db.db.get(self.pkgname, {})
@@ -496,17 +512,17 @@ def main(opts):
         if path is None:
             path = os.getcwd()
 
-        if opts["--pkgname"]:
+        if opts["--pkgname"] or opts["update"]:
             pkgname = opts["<package>"]
         else:
             pkgname = infer_pkgname_from_dir(path)
 
         pkg = Package(pkgname, db, fetch_with, path)
-        if opts["update"] or opts.get("--force", False):
-            dest = pkg.fetch(force_update=True)
+        if opts["update"]:
+            dest = pkg.update()
         else:
             dest = pkg.fetch()
-        pkg.install(force=force)
+        pkg.install()
     elif opts["build"]:
         PackageConfig(opts["<path>"] or ".",
                       "<nopkg-cwd>").build(db, into_cwd=True, force=force)
