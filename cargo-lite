@@ -41,6 +41,7 @@ import sh
 import toml
 from docopt import docopt
 from fnmatch import fnmatch
+from distutils import dir_util
 from colorama import init, Fore
 # blake2 was selected due to its excellent performance characteristics,
 # support of tree hashing (should we chose to use it, eventually), and
@@ -397,7 +398,7 @@ class Package(object):
 
         _error("Could not guess what to fetch {} with".format(self.pkgname))
 
-    def fetch(self):
+    def fetch(self, force_update=False):
         """ Fetch the source unconditionally.
 
         This will clobber anything that was already in the destination
@@ -415,9 +416,17 @@ class Package(object):
         dest = os.path.join(_expand(srcdir), self.pkgname)
         self.dest = dest
 
-        if os.path.exists(dest):
+
+        if os.path.exists(dest) and force_update:
             # TODO: git pull, hg whatever, etc, instead of re-cloning
-            shutil.rmtree(dest)
+            if fetch_with == "git":
+                git("-C", dest, "pull", "origin", "master")
+            elif fetch_with == "hg":
+                hg.pull("--cwd", dest, "--force", "--update")
+            elif fetch_with == "local":
+                dir_util.copy_tree(ffrom, dest)
+        elif not force_update:
+            return dest
 
         if fetch_with == "local":
             shutil.copytree(ffrom, dest)
@@ -493,7 +502,10 @@ def main(opts):
             pkgname = infer_pkgname_from_dir(path)
 
         pkg = Package(pkgname, db, fetch_with, path)
-        dest = pkg.fetch()
+        if opts["update"] or opts.get("--force", False):
+            dest = pkg.fetch(force_update=True)
+        else:
+            dest = pkg.fetch()
         pkg.install(force=force)
     elif opts["build"]:
         PackageConfig(opts["<path>"] or ".",
