@@ -98,7 +98,7 @@ try:
     from sh import git
 except ImportError:
     def git(*args, **kwargs):
-        _fatal_error("git not installed, but request")
+        _fatal_error("git not installed, but was requested")
 
 try:
     from sh import hg
