@@ -134,7 +134,7 @@ class PackageConfig(object):
     This holds metadata about a package, such as its dependencies and how to
     build it, as well as carrying out those actions.
     """
-    def __init__(self, path, pkgname):
+    def __init__(self, path, pkgname, db):
         """Create a new PackageConfig from a file
 
         :param str path The directory where the cargo-lite.conf will be found,
@@ -147,13 +147,14 @@ class PackageConfig(object):
         self.path = _expand(path)
         self.pkgname = pkgname
         self.raw = toml.loads(open(path).read())
+        self.db = db
 
     def install_deps(self):
         for dep in self.raw.get("deps", []):
             dep.insert(0, "install")
-            main(docopt(__doc__, version=VERSION, argv=dep))
+            main(docopt(__doc__, version=VERSION, argv=dep), db=self.db)
 
-    def build(self, db, args=None, into_cwd=False, force=False):
+    def build(self, args=None, into_cwd=False, force=False):
         """Build a package.
 
         :param Database db Database to use for dependencies and config
@@ -161,6 +162,7 @@ class PackageConfig(object):
         :returns The directory where the build artifacts are stored
         """
         self.install_deps()
+        db = self.db
 
         if args is None:
             args = []
@@ -169,8 +171,8 @@ class PackageConfig(object):
         sp = False
         for subpackage in self.raw.get("subpackages", []):
             with cd(subpackage):
-                lds.append(PackageConfig(".", self.pkgname + "/" + subpackage)
-                           .install(db, args, force))
+                lds.append(PackageConfig(".", self.pkgname + "/" + subpackage, db)
+                           .install(args, force))
                 sp = True
 
         if not "build" in self.raw and not sp:
@@ -266,14 +268,15 @@ class PackageConfig(object):
         db.save()
         return lds
 
-    def install(self, db, args=None, force=False):
+    def install(self, args=None, force=False):
         """Build and install the artifacts
 
         Arguments are the same as build.
         :returns files that were installed
         """
 
-        ds = self.build(db, args, force)
+        db = self.db
+        ds = self.build(args, force)
         inst = []
         for d in ds:
             for f in os.listdir(d):
@@ -418,7 +421,7 @@ class Package(object):
         dest = os.path.join(_expand(srcdir), self.pkgname)
         self.dest = dest
 
-
+        updated = False
         try:
             if os.path.exists(dest):
                 if fetch_with == "git":
@@ -427,17 +430,19 @@ class Package(object):
                     hg.pull("--cwd", dest, "--force", "--update")
                 elif fetch_with == "local":
                     dir_util.copy_tree(ffrom, dest)
+                updated = True
         except:
             shutil.rmtree(dest)
 
-        if fetch_with == "local":
-            shutil.copytree(ffrom, dest)
-        elif fetch_with == "git":
-            git.clone(ffrom, dest)
-        elif fetch_with == "hg":
-            hg.clone(ffrom, dest)
-        else:
-            _fatal_error("Unknown fetch method {}".format(fetch_with))
+        if updated is False:
+            if fetch_with == "local":
+                shutil.copytree(ffrom, dest)
+            elif fetch_with == "git":
+                git.clone(ffrom, dest)
+            elif fetch_with == "hg":
+                hg.clone(ffrom, dest)
+            else:
+                _fatal_error("Unknown fetch method {}".format(fetch_with))
 
         self.save_fetchinfo()
         return dest
@@ -455,7 +460,6 @@ class Package(object):
 
         return dest
 
-
     def save_fetchinfo(self):
         db = self.db.db.get(self.pkgname, {})
         db["fetch_with"] = getattr(self, "fetch_with", "") or ""
@@ -468,12 +472,12 @@ class Package(object):
         d = self.dest
 
         with cd(d):
-            return PackageConfig(".", self.pkgname).build(self.db, force=force)
+            return PackageConfig(".", self.pkgname, self.db).build(force=force)
 
     def install(self, force=False):
         d = self.dest
         with cd(d):
-            v = PackageConfig(".", self.pkgname).install(self.db, force=force)
+            v = PackageConfig(".", self.pkgname, self.db).install(force=force)
 
         db = self.db.db[self.pkgname]
         db["installed_artifacts"] = v
@@ -489,11 +493,12 @@ def infer_pkgname_from_dir(path):
     return pkgname
 
 
-def main(opts):
-    if "--db" in opts:
-        db = Database(opts["<db>"])
-    else:
-        db = Database()
+def main(opts, db=None):
+    if db is None:
+        if "--db" in opts:
+            db = Database(opts["<db>"])
+        else:
+            db = Database()
 
     force = opts.get("--force", False)
 
@@ -525,7 +530,7 @@ def main(opts):
         pkg.install()
     elif opts["build"]:
         PackageConfig(opts["<path>"] or ".",
-                      "<nopkg-cwd>").build(db, into_cwd=True, force=force)
+                      "<nopkg-cwd>", db).build(into_cwd=True, force=force)
     else:
         _fatal_error("unrecognized command")
 
