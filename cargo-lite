@@ -198,8 +198,9 @@ class PackageConfig(object):
                     # even if it hasn't, has rustc been upgraded?
                     if pdb["built_with"] == str(rustc("--version")):
                         # all set, let's skip it
-                        _debug("skipping build for {}".format(self.pkgname))
+                        _debug("...and rustc is the same, skipping {}".format(self.pkgname))
                         return []
+                    _debug("...but rustc is new")
                 else:
                     # ok, we need to rebuild
                     _debug("continuing build, hash was {}, old was {}"
