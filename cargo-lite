@@ -238,7 +238,12 @@ class PackageConfig(object):
                 args.extend([ctype, "-L", db.conf["libdir"]])
                 env["CARGO_RUSTFLAGS"] = " ".join(args)
 
-                out = sh.Command(b["build_cmd"])(_env=env)
+                bc = b["build_cmd"]
+                if isinstance(bc, str):
+                    out = sh.Command(bc)(_env=env)
+                else:
+                    # handle commands w/args
+                    out = sh.Command(bc[0])(*bc[1:], _env=env)
             except sh.ErrorReturnCode as e:
                 _error("The build command for {} failed with exit code {}"
                        .format(self.pkgname, e.exit_code))
