@@ -4,9 +4,9 @@
 """cargo-lite, a dirt simple Rust package manager
 
 Usage:
-  cargo-lite.py install [--git | --hg | --local] [--pkgname=<package>] [<path>]
-  cargo-lite.py build [<path>]
-  cargo-lite.py update [<package>]
+  cargo-lite.py install [--git | --hg | --local] [--pkgname=<package>] [<path>] [options]
+  cargo-lite.py build [<path>] [options]
+  cargo-lite.py update [<package>] [options]
   cargo-lite.py --version
 
 Options:
@@ -22,6 +22,9 @@ Options:
   --hg          Fetch source using hg
   --local       Copy source from local directory
   --version     Show version.
+  --no-opt      Disable optimizations (by default `-O` is passed to rustc)
+  --debug       Enable debuginfo (rustc -g)
+  --lto         Enable LTO (rustc -Z lto --opt-level=3)
 """
 
 import os
@@ -236,6 +239,7 @@ class PackageConfig(object):
                 env["CARGO_OUT_DIR"] = ld
                 args += b.get("rustc_args", [])
                 args.extend([ctype, "-L", db.conf["libdir"]])
+                _debug("rustc args: " + str(args))
                 env["CARGO_RUSTFLAGS"] = " ".join(args)
 
                 bc = b["build_cmd"]
@@ -474,16 +478,18 @@ class Package(object):
 
         self.db.db[self.pkgname] = db
 
-    def build(self, force=False):
+    def build(self, args=None, force=False):
         d = self.dest
 
         with cd(d):
-            return PackageConfig(".", self.pkgname, self.db).build(force=force)
+            return PackageConfig(".", self.pkgname, self.db).build(args=args,
+                                                                   force=force)
 
-    def install(self, force=False):
+    def install(self, args=None, force=False):
         d = self.dest
         with cd(d):
-            v = PackageConfig(".", self.pkgname, self.db).install(force=force)
+            v = PackageConfig(".", self.pkgname, self.db).install(args=args,
+                                                                  force=force)
 
         db = self.db.db[self.pkgname]
         db["installed_artifacts"] = v
@@ -499,14 +505,40 @@ def infer_pkgname_from_dir(path):
     return pkgname
 
 
+def _make_args(opts):
+    args = []
+
+    opt = False
+
+    if opts["--debug"]:
+        args.append("-g")
+
+    if opts["--lto"]:
+        args.extend("-Z", "lto")
+        if not opts["--no-opt"]:
+            opt = True
+            args.append("--opt-level=3")
+
+    if opts["--no-opt"]:
+        opt = True
+        args.append("--opt-level=0")
+
+    if not opt:
+        args.append("-O")
+
+    return args
+
 def main(opts, db=None):
+    _debug(opts)
     if db is None:
-        if "--db" in opts:
-            db = Database(opts["<db>"])
-        else:
+        if opts["--db"] is None:
             db = Database()
+        else:
+            db = Database(opts["--db"])
 
     force = opts.get("--force", False)
+
+    rustcargs = _make_args(opts)
 
     if opts["install"] or opts["update"]:
         # install and update really are the same thing!
@@ -533,10 +565,11 @@ def main(opts, db=None):
             dest = pkg.update()
         else:
             dest = pkg.fetch()
-        pkg.install()
+        pkg.install(args=rustcargs)
     elif opts["build"]:
         PackageConfig(opts["<path>"] or ".",
-                      "<nopkg-cwd>", db).build(into_cwd=True, force=force)
+                      "<nopkg-cwd>", db).build(args=rustcargs, into_cwd=True,
+                                               force=force)
     else:
         _fatal_error("unrecognized command")
 
