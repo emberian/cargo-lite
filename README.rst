@@ -1,5 +1,5 @@
 =================
-cargo-lite v1.0.0
+cargo-lite v1.1.0
 =================
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
@@ -31,6 +31,12 @@ Getting Help
 
 You can find me on ``irc.mozilla.org`` as ``cmr``. Look for me
 ``#rust-gamedev``.
+
+Contributing
+------------
+
+Feel free to open issues or send pull requests. Pull requests should be
+against the ``dev`` branch.
 
 =========================
 How To Use ``cargo-lite``
@@ -171,3 +177,9 @@ Non-goals
 - rustc integration beyond what is already present (no hooking into libsyntax
   etc)
 - rust rewrite, or a rewrite into any other language
+
+To-do
+-----
+
+- Allow passing arbitrary rustc args
+- Tests
