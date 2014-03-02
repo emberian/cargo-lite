@@ -1,5 +1,5 @@
 =================
-cargo-lite v0.3.0
+cargo-lite v1.0.0
 =================
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
@@ -15,7 +15,12 @@ changes.
 Installation
 ------------
 
-Install using distutils::
+You can use pip::
+
+    pip install cargo-lite
+
+
+Or, you can do it manually, using distutils::
 
     git clone https://github.com/cmr/cargo-lite.git
     cd cargo-lite
@@ -44,7 +49,7 @@ This specifies two dependencies: gl-rs_ and glfw-rs_. It specifies that they
 should be cloned with ``git``. ``cargo-lite install`` will read their
 top-level ``cargo-lite.conf``, install all of their dependencies, and then
 build them, copying their build artifacts into the package depository
-(currently hardcoded as ``~/.rust``). To build your own crate, you need an
+(currently hardcoded as ``~/.rust/lib``). To build your own crate, you need an
 additional section in the ``cargo-lite.conf``::
 
     [build]
@@ -69,17 +74,18 @@ your crate. It will output the build artifacts in the same place as running
 For more complex projects, ``cargo-lite`` accepts the following directives::
 
     subpackages = ["src/foo", "src/examples"]
+
     [build]
     build_cmd = "./build.sh"
 
 ``cargo-lite.py`` will first recurse into the subpackages, installing those,
-and will then run the ``build_cmd`` with the system's shell. Two environment
-variables will be added, which the ``build_cmd`` is expected to respect:
-``CARGO_OUT_DIR``, which is where artifacts that to be installed must be
-copied to, and ``CARGO_RUSTFLAGS``, which should be passed to rustc for all
-artifacts that are copied into ``CARGO_OUT_DIR``. The ``CARGO_RUSTFLAGS`` will
-include things like ``-L /path/where/cargo-lite/libs/are/stored`` and
-optimization options.
+and will then execute the ``build_cmd``. Two environment variables will be
+added, which the ``build_cmd`` is expected to respect: ``CARGO_OUT_DIR``,
+which is where artifacts to be installed must be copied to, and
+``CARGO_RUSTFLAGS``, which should be passed to rustc for all artifacts that
+are to be copied into ``CARGO_OUT_DIR``. The ``CARGO_RUSTFLAGS`` will include
+things like ``-L /path/where/cargo-lite/libs/are/stored`` and optimization
+options.
 
 .. _toml: https://github.com/mojombo/toml
 .. _gl-rs: https://github.com/bjz/gl-rs
@@ -130,6 +136,11 @@ sub-attributes:
 
     Only ``mtime`` is hashed, to try and keep time down. Due to the crate
     model, fine-grained dependency tracking isn't particularly useful.
+``build_cmd``
+    Either a string, or a list of strings. If just a string, it specifies the
+    program that will carry out the building. If a list, the first argument is
+    the program that will be executed, and the rest the arguments to that
+    program.
 
 At least one of ``crate_root`` and ``build_cmd`` must be specified. If both
 are specified, the ``build_cmd`` is run first, allowing for custom code
@@ -140,30 +151,23 @@ be printed.
 FAQ
 ===
 
-why python?
+Why Python?
 -----------
 
-Because it's simple and easy to write incorrect software that works (ie, this)
+Because it's simple, ubiquitous, and most importantly, what I know.
 
-wow this sucks
---------------
+Wow, this kinda sucks!
+----------------------
 
 Yup! I don't handle versioning, intelligent rebuilding, or anything of that
-sort. Pull requests accepted. Its design revolves around "I want to release
-this today".
+sort. Pull requests accepted, but keep in mind that this is meant to be
+temporary, and not solve the hard problems of package management.
 
-todo
-----
-
-- store rustc version lib built with
-- rebuild deps when they change (generate make files? see https://gist.github.com/csherratt/8627881)
-
-non-goals
+Non-goals
 ---------
 
-- versioning of dependencies
-- build system beyond simply running rustc or a single shell command
+- Versioning of dependencies
+- Build system beyond simply running rustc or a single shell command
 - rustc integration beyond what is already present (no hooking into libsyntax
   etc)
 - rust rewrite, or a rewrite into any other language
-
