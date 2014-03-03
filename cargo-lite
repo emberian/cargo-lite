@@ -323,7 +323,7 @@ class Database(object):
                 pass
 
             target = str(rustc("--version"))
-            target = target.split("\n")[-1].split("host: ")[-1]
+            target = target.split("\n")[1].split("host: ")[-1]
 
             init = {"srcdir": _expand("~/.rust/src"), "libdir":
                     _expand("~/.rust/lib/" + target), "tempdir": "/tmp"}
