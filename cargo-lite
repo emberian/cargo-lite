@@ -51,7 +51,7 @@ from colorama import init, Fore
 # its strength advantage over md5.
 from pyblake2 import blake2b as blake2
 
-VERSION = "cargo-lite 1.1.0"
+VERSION = "cargo-lite 1.1.1"
 tempdirs = []
 
 init()
