@@ -321,8 +321,13 @@ class Database(object):
                 os.makedirs(os.path.dirname(cfgfile))
             except OSError:
                 pass
+
+            target = str(rustc("--version"))
+            target = target.split("\n")[-1].split("host: ")[-1]
+
             init = {"srcdir": _expand("~/.rust/src"), "libdir":
-                    _expand("~/.rust/lib"), "tempdir": "/tmp"}
+                    _expand("~/.rust/lib/" + target), "tempdir": "/tmp"}
+
             with open(cfgfile, "w") as f:
                 toml.dump(init, f)
             self.conf = init
