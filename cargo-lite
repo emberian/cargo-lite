@@ -127,7 +127,7 @@ def _hash_dir(globs, path):
             for glob in globs:
                 if fnmatch(f, glob):
                     _debug("{} matched {}, checking for hash".format(f, glob))
-                    state.update(str(os.path.getmtime(os.path.join(root, f))))
+                    state.update(str(os.path.getmtime(os.path.join(root, f))).encode('utf-8'))
     return state.hexdigest()
 
 
