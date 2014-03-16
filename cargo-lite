@@ -174,7 +174,7 @@ class PackageConfig(object):
         sp = False
         for subpackage in self.raw.get("subpackages", []):
             with cd(subpackage):
-                lds.append(PackageConfig(".", self.pkgname + "/" + subpackage, db)
+                lds.append(PackageConfig(_expand(os.path.join(".", self.pkgname, subpackage)), db)
                            .install(args, force))
                 sp = True
 
