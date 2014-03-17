@@ -149,7 +149,7 @@ class PackageConfig(object):
 
         self.path = _expand(path)
         self.pkgname = pkgname
-        self.raw = toml.loads(open(path).read())
+        self.raw = toml.loads(open(_expand(path)).read())
         self.db = db
 
     def install_deps(self):
@@ -174,7 +174,7 @@ class PackageConfig(object):
         sp = False
         for subpackage in self.raw.get("subpackages", []):
             with cd(subpackage):
-                lds.append(PackageConfig(_expand(os.path.join(".", self.pkgname, subpackage)), db)
+                lds.append(PackageConfig(".", self.pkgname + "/" + subpackage, db)
                            .install(args, force))
                 sp = True
 
