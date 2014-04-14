@@ -264,12 +264,15 @@ class PackageConfig(object):
             args.extend([crate_root, ctype, "-L", db.conf["libdir"]])
             if not "--out-dir" in args:
                 args.extend(("--out-dir", ld))
-            output = rustc(*args)
-            if output.exit_code != 0:
-                _error("building {} with rustc failed with status {},\
-                        output: {}\n".format(crate_root, output.exit_code,
-                                             str(output)))
-                _fatal_error(e.stderr)
+            try:
+                output = rustc(*args)
+            except sh.ErrorReturnCode as e:
+                _error("building {} with rustc failed with status {}:\n\n".format(
+                    crate_root, e.exit_code))
+                _info("{}\n".format(e.full_cmd))
+                if e.stdout.strip():
+                    _info("stdout:\n{}".format(e.stdout))
+                print e.stderr
             built = True
 
         if built is False:
