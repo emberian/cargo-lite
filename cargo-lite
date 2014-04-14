@@ -261,7 +261,9 @@ class PackageConfig(object):
                 ld = os.path.dirname(crate_root)
 
             args += b.get("rustc_args", [])
-            args.extend([crate_root, ctype, "-L", db.conf["libdir"], "--out-dir", ld])
+            args.extend([crate_root, ctype, "-L", db.conf["libdir"]])
+            if not "--out-dir" in args:
+                args.extend(("--out-dir", ld))
             output = rustc(*args)
             if output.exit_code != 0:
                 _error("building {} with rustc failed with status {},\
