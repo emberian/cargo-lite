@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(name='cargo-lite',
-      version='1.1.3',
+      version='1.1.4',
       description='Rust package manager',
       author='Corey Richardson',
       author_email='corey@octayn.net',

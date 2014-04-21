@@ -1,5 +1,5 @@
 =================
-cargo-lite v1.1.2
+cargo-lite v1.1.4
 =================
 
 ``cargo-lite`` is an interim package manager for Rust that is sloppily
