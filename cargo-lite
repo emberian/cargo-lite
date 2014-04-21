@@ -272,7 +272,7 @@ class PackageConfig(object):
                 _info("{}\n".format(e.full_cmd))
                 if e.stdout.strip():
                     _info("stdout:\n{}".format(e.stdout))
-                print e.stderr
+                print(e.stderr)
             built = True
 
         if built is False:
