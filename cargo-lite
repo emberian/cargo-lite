@@ -82,6 +82,15 @@ def _debug(msg):
         print(msg)
 
 
+def _check_sh_exit_code(sh_cmd_output):
+    """sh ignores failures caused by most of signals"""
+    if sh_cmd_output.exit_code != 0:
+        raise sh.get_rc_exc(sh_cmd_output.exit_code)(
+            sh_cmd_output.ran,
+            sh_cmd_output.process.stdout,
+            sh_cmd_output.process.stderr)
+
+
 class cd:
     """Context manager for changing the current working directory, creating if necessary"""
     def __init__(self, newPath):
@@ -248,6 +257,7 @@ class PackageConfig(object):
                 else:
                     # handle commands w/args
                     out = sh.Command(bc[0])(*bc[1:], _env=env)
+                    _check_sh_exit_code(out)
             except sh.ErrorReturnCode as e:
                 _error("The build command for {} failed with exit code {}"
                        .format(self.pkgname, e.exit_code))
@@ -266,6 +276,7 @@ class PackageConfig(object):
                 args.extend(("--out-dir", ld))
             try:
                 output = rustc(*args)
+                _check_sh_exit_code(output)
             except sh.ErrorReturnCode as e:
                 _error("building {} with rustc failed with status {}:\n\n".format(
                     crate_root, e.exit_code))
