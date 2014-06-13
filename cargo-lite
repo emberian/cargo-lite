@@ -470,7 +470,7 @@ class Package(object):
             if fetch_with == "local":
                 shutil.copytree(ffrom, dest)
             elif fetch_with == "git":
-                git.clone(ffrom, dest)
+                git.clone("--recursive", ffrom, dest)
             elif fetch_with == "hg":
                 hg.clone(ffrom, dest)
             else:
