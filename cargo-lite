@@ -101,6 +101,7 @@ class cd:
 
     def __enter__(self):
         self.savedPath = os.getcwd()
+        _debug("cd into {}".format(self.newPath))
         os.chdir(self.newPath)
 
     def __exit__(self, etype, value, traceback):
