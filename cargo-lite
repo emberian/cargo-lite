@@ -30,6 +30,7 @@ Options:
 import os
 import sys
 import shutil
+import platform
 
 from glob import glob
 from tempfile import mkdtemp
@@ -40,7 +41,11 @@ except ImportError:
     from urllib.parse import urlparse
 from datetime import datetime
 
-import sh
+if platform.system() == 'Windows':
+    import pbs as sh
+else:
+    import sh
+
 import toml
 from docopt import docopt
 from fnmatch import fnmatch
