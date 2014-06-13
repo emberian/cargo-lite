@@ -4,10 +4,10 @@
 """cargo-lite, a dirt simple Rust package manager
 
 Usage:
-  cargo-lite.py install [--git | --hg | --local] [--pkgname=<package>] [<path>] [options]
-  cargo-lite.py build [<path>] [options]
-  cargo-lite.py update [<package>] [options]
-  cargo-lite.py --version
+  cargo-lite install [--git | --hg | --local] [--pkgname=<package>] [<path>] [options]
+  cargo-lite build [<path>] [options]
+  cargo-lite update [<package>] [options]
+  cargo-lite --version
 
 Options:
   install       Install a package, copying its build output to the library
